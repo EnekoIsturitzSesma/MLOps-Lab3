@@ -70,7 +70,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_USERNAME: ${{ secrets.HF_USERNAME }}
-        run: git remote add huggingface https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/MLOps-Lab2.git
+        run: git remote add huggingface https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/MLOps-Lab3.git
 
       - name: Push hf-space branch to Hugging Face
         run: git push huggingface hf-space:main --force
