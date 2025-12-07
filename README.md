@@ -2,7 +2,7 @@
 title: MLOps Lab3
 emoji: 🏢
 colorFrom: green
-colorTo: orange
+colorTo: red
 sdk: gradio
 sdk_version: 6.0.1
 app_file: app.py
