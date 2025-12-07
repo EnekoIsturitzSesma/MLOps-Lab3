@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build   # it is not executed if build fails
     env:
-          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/calculator-api:latest
+          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/lab3-container:latest
     steps:
       - name: Checkout repository (with submodules)
         uses: actions/checkout@v4 
@@ -48,7 +48,7 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE }}
           file: ./Dockerfile
       - name: Trigger Render Deploy
-        run: curl -X POST "https://api.render.com/deploy/srv-d4kn49fdiees73bnhj40?key=${{ secrets.RENDER_DEPLOY_HOOK_KEY }}"
+        run: curl -X POST "https://api.render.com/deploy/srv-d4qkq6be5dus73eppfqg?key=${{ secrets.RENDER_DEPLOY_HOOK_KEY }}"
 
 
   deploy-hf:
