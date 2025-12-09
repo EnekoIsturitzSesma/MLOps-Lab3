@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM base AS builder
 # Install uv
 RUN pip install --no-cache-dir uv
+# Forzar Python 3.12
+RUN uv use 3.12
 # Copy the dependencies file
 COPY pyproject.toml .
 # Copy the lock file if exists
