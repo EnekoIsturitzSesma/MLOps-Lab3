@@ -1,5 +1,5 @@
-# Base image with Python 3.13
-FROM python:3.13-slim AS base
+# Base image with Python 3.12
+FROM python:3.12-slim AS base
 
 # Recommended environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
