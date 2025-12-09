@@ -1,26 +1,54 @@
-"""
-Module providing basic image processing operations and a simple random classifier.
-Includes functions for random class prediction, resizing, grayscale conversion,
-and normalization.
-"""
-
-import random
+import json
 import numpy as np
+import onnxruntime as ort
+from PIL import Image
+import torchvision.transforms as transforms
 
+
+class PetClassifierONNX:
+    def __init__(self, model_path="best_model.onnx", labels_path="class_labels.json"):
+        # Load class labels
+        with open(labels_path, "r", encoding="utf-8") as f:
+            self.class_labels = json.load(f)
+
+        # ONNX Runtime session
+        sess_options = ort.SessionOptions()
+        sess_options.intra_op_num_threads = 4
+
+        self.session = ort.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+
+        self.input_name = self.session.get_inputs()[0].name
+
+        # Preprocessing (same as training)
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+
+    def preprocess(self, image: Image.Image):
+        tensor = self.transform(image)
+        tensor = tensor.unsqueeze(0)  # batch dimension
+        return tensor.numpy()
+
+    def predict(self, image: Image.Image):
+        inp = self.preprocess(image)
+        outputs = self.session.run(None, {self.input_name: inp})
+        logits = outputs[0][0]  # first batch element
+        pred_idx = int(np.argmax(logits))
+        return self.class_labels[pred_idx]
+
+
+model = PetClassifierONNX("model.onnx", "class_labels.json")
 
 def predict_class(image):
-    """
-    Returns a random class label to simulate an image classification process.
-
-    Parameters:
-        image (PIL.Image): Input image (not used in the random prediction).
-
-    Returns:
-        str: A randomly selected label from ['dog', 'cat', 'horse', 'bear', 'pig'].
-    """
-    _ = image
-    classes = ["dog", "cat", "horse", "bear", "pig"]
-    return random.choice(classes)
+    return model.predict(image)
 
 
 def resize_image(image, size):

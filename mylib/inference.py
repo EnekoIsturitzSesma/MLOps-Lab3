@@ -1,61 +1,77 @@
-"""
-Load an ONNX model with onnxruntime and run inference on an input image.
-Outputs predicted class name (requires class_labels.json in same folder).
-"""
-
-import argparse
+import json
 import numpy as np
 from PIL import Image
 import onnxruntime as ort
-import json
-
-from torchvision import transforms
 
 
-def preprocess(image_path):
-    img = Image.open(image_path).convert("RGB")
-    transform = transforms.Compose(
-        [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    t = transform(img)
-    # ONNX runtime expects numpy arrays (batch, c, h, w) as float32
-    return t.unsqueeze(0).numpy().astype(np.float32)
+class PetClassifierONNX:
+    """
+    Wrapper para cargar un modelo ONNX y hacer inferencias.
+    """
 
+    def __init__(self, model_path: str, labels_path: str):
+        # --- Load labels ---
+        with open(labels_path, "r", encoding="utf-8") as f:
+            self.labels = json.load(f)
 
-def softmax(x):
-    e = np.exp(x - np.max(x))
-    return e / e.sum(axis=1, keepdims=True)
+        # --- ONNX Runtime session ---
+        sess_options = ort.SessionOptions()
+        sess_options.intra_op_num_threads = 4
 
+        self.session = ort.InferenceSession(
+            model_path,
+            sess_options=sess_options,
+            providers=["CPUExecutionProvider"],
+        )
 
-def main(args):
-    # load labels
-    with open(args.labels, "r", encoding="utf-8") as f:
-        classes = json.load(f)
+        # Nombre esperado por el modelo
+        self.input_name = self.session.get_inputs()[0].name
 
-    # load ONNX model
-    sess = ort.InferenceSession(args.onnx_model)
-    input_name = sess.get_inputs()[0].name
+        print(f"Loaded ONNX model: {model_path}")
+        print(f"Loaded labels: {labels_path}")
 
-    x = preprocess(args.image)
-    preds = sess.run(None, {input_name: x})
-    logits = preds[0]
-    probs = softmax(logits)
-    pred_idx = int(probs.argmax(axis=1)[0])
-    pred_label = classes[pred_idx]
-    confidence = float(probs[0, pred_idx])
-    print(
-        f"Predicted: {pred_label} (index={pred_idx}) with confidence {confidence:.4f}"
-    )
+    # -------------------------------------------------------------
+    # Image preprocessing (same as training)
+    # -------------------------------------------------------------
+    def preprocess(self, img: Image.Image) -> np.ndarray:
+        """
+        Preprocesa la imagen al formato esperado por MobileNetV2:
+        - Convertir a RGB
+        - Redimensionar a 224x224
+        - Normalizar con coeficientes de ImageNet
+        - Añadir dimensión batch
+        """
+        img = img.convert("RGB")
+        img = img.resize((224, 224))
 
+        img = np.array(img).astype("float32") / 255.0
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--onnx-model", default="best_model.onnx")
-    parser.add_argument("--image", required=True)
-    parser.add_argument("--labels", default="class_labels.json")
-    inf_args = parser.parse_args()
-    main(inf_args)
+        # Normalización ImageNet
+        mean = np.array([0.485, 0.456, 0.406])
+        std = np.array([0.229, 0.224, 0.225])
+        img = (img - mean) / std
+
+        img = np.transpose(img, (2, 0, 1))  # HWC → CHW
+        img = np.expand_dims(img, axis=0)  # añadir batch
+
+        return img.astype("float32")
+
+    # -------------------------------------------------------------
+    # Prediction
+    # -------------------------------------------------------------
+    def predict(self, img: Image.Image) -> str:
+        """
+        Devuelve el label predicho.
+        """
+
+        x = self.preprocess(img)
+
+        inputs = {self.input_name: x}
+
+        outputs = self.session.run(None, inputs)
+        logits = outputs[0][0]  # shape: [num_classes]
+
+        class_idx = int(np.argmax(logits))
+        class_label = self.labels[class_idx]
+
+        return class_label

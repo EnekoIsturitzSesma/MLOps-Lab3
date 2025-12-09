@@ -1,227 +1,203 @@
-"""
-Train a small transfer-learning model on Oxford-IIIT Pet, track experiments with MLflow,
-and register each trained model under the same registered model name.
-"""
-
 import json
+import os
 import random
-from datetime import datetime
-import itertools
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, random_split
-from torchvision import transforms, models
-from torchvision.datasets import OxfordIIITPet
-
 import mlflow
 import mlflow.pytorch
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, models, transforms
+from torch.utils.data import DataLoader, random_split
+import matplotlib.pyplot as plt
+import numpy as np
 
 
+# -----------------------------
+# Reproducibilidad
+# -----------------------------
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device):
-    model.train()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    for imgs, labels in dataloader:
-        imgs = imgs.to(device)
-        labels = labels.to(device)
-        optimizer.zero_grad()
-        outputs = model(imgs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item() * imgs.size(0)
-        preds = outputs.argmax(dim=1)
-        correct += (preds == labels).sum().item()
-        total += imgs.size(0)
-    return running_loss / total, correct / total
+# -----------------------------
+# Main training function
+# -----------------------------
+def train_model(
+    experiment_name="pet_experiments",
+    model_name="mobilenetV2",
+    batch_size=16,
+    lr=1e-3,
+    num_epochs=3,
+):
+    set_seed(42)
 
+    # -----------------------------
+    # MLflow setup
+    # -----------------------------
+    mlflow.set_experiment(experiment_name)
+    run_name = f"{model_name}_bs{batch_size}_lr{lr}"
 
-def eval_one_epoch(model, dataloader, criterion, device):
-    model.eval()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for imgs, labels in dataloader:
-            imgs = imgs.to(device)
-            labels = labels.to(device)
-            outputs = model(imgs)
-            loss = criterion(outputs, labels)
-            running_loss += loss.item() * imgs.size(0)
-            preds = outputs.argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += imgs.size(0)
-    return running_loss / total, correct / total
-
-
-def run_experiment(config, args, dataset, n_classes):
-    set_seed(args.seed)
-    device = torch.device("cpu")
-
-    # Split dataset
-    n = len(dataset)
-    n_val = int(n * args.val_ratio)
-    n_train = n - n_val
-    generator = torch.Generator().manual_seed(args.seed)
-    train_ds, val_ds = random_split(dataset, [n_train, n_val], generator=generator)
-
-    train_loader = DataLoader(
-        train_ds, batch_size=config["batch_size"], shuffle=True, num_workers=2
-    )
-    val_loader = DataLoader(
-        val_ds, batch_size=config["batch_size"], shuffle=False, num_workers=2
-    )
-
-    # Prepare model
-    backbone = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.IMAGENET1K_V1)
-    for param in backbone.features.parameters():
-        param.requires_grad = False
-
-    in_features = backbone.classifier[1].in_features
-    backbone.classifier = nn.Sequential(
-        nn.Dropout(p=0.2), nn.Linear(in_features, n_classes)
-    )
-    model = backbone.to(device)
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=config["lr"]
-    )
-
-    # MLflow logging
-    run_name = f"{args.model_name}_bs{config['batch_size']}_lr{config['lr']}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    with mlflow.start_run(run_name=run_name) as run:
-        run_id = run.info.run_id
+    with mlflow.start_run(run_name=run_name):
+        # Log parámetros
         mlflow.log_params(
             {
-                "seed": args.seed,
-                "model_name": args.model_name,
-                "dataset": "OxfordIIITPet(trainval)",
-                "n_classes": n_classes,
-                "batch_size": config["batch_size"],
-                "lr": config["lr"],
-                "optimizer": "Adam",
-                "epochs": args.epochs,
-                "val_ratio": args.val_ratio,
+                "model": model_name,
+                "batch_size": batch_size,
+                "learning_rate": lr,
+                "epochs": num_epochs,
+                "seed": 42,
+                "dataset": "Oxford-IIIT Pet",
             }
         )
 
-        train_losses, val_losses, train_accs, val_accs = [], [], [], []
+        # -----------------------------
+        # Data transforms
+        # -----------------------------
+        transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                ),
+            ]
+        )
 
-        for epoch in range(1, args.epochs + 1):
-            train_loss, train_acc = train_one_epoch(
-                model, train_loader, criterion, optimizer, device
-            )
-            val_loss, val_acc = eval_one_epoch(model, val_loader, criterion, device)
+        dataset = datasets.OxfordIIITPet(
+            root="./data",
+            download=True,
+            transform=transform,
+            target_types="category",
+        )
 
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
-            train_accs.append(train_acc)
-            val_accs.append(val_acc)
 
-            mlflow.log_metric("train_loss", train_loss, step=epoch)
-            mlflow.log_metric("val_loss", val_loss, step=epoch)
-            mlflow.log_metric("train_accuracy", train_acc, step=epoch)
-            mlflow.log_metric("val_accuracy", val_acc, step=epoch)
+
+        num_classes = len(getattr(dataset, "classes", []))
+
+        # Save class labels for later
+        os.makedirs("results", exist_ok=True)
+        class_path = "results/class_labels.json"
+        with open(class_path, "w", encoding="utf-8") as f:
+            json.dump(getattr(dataset, "classes", []), f)
+        mlflow.log_artifact(class_path)
+
+        # Split dataset
+        total = len(dataset)
+        train_size = int(0.8 * total)
+        val_size = total - train_size
+        train_dataset, val_dataset = random_split(
+            dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42)
+        )
+
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size)
+
+        # -----------------------------
+        # Load pretrained model
+        # -----------------------------
+        model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.IMAGENET1K_V1)
+        for param in model.features.parameters():
+            param.requires_grad = False
+
+        model.classifier[1] = nn.Linear(model.last_channel, num_classes)
+
+        device = "cpu"
+        model.to(device)
+
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+
+        # -----------------------------
+        # Training Loop
+        # -----------------------------
+        train_losses = []
+        val_losses = []
+        val_accuracies = []
+
+        for epoch in range(num_epochs):
+            model.train()
+            running_loss = 0.0
+
+            for images, labels in train_loader:
+                images, labels = images.to(device), labels.to(device)
+
+                optimizer.zero_grad()
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item()
+
+            avg_train_loss = running_loss / len(train_loader)
+            train_losses.append(avg_train_loss)
+
+            # Validation
+            model.eval()
+            val_loss = 0.0
+            correct = 0
+            total = 0
+
+            with torch.no_grad():
+                for images, labels in val_loader:
+                    images, labels = images.to(device), labels.to(device)
+                    outputs = model(images)
+                    loss = criterion(outputs, labels)
+                    val_loss += loss.item()
+
+                    _, predicted = torch.max(outputs, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
+
+            avg_val_loss = val_loss / len(val_loader)
+            accuracy = correct / total
+
+            val_losses.append(avg_val_loss)
+            val_accuracies.append(accuracy)
+
+            # Log metrics
+            mlflow.log_metric("train_loss", avg_train_loss, step=epoch)
+            mlflow.log_metric("val_loss", avg_val_loss, step=epoch)
+            mlflow.log_metric("val_accuracy", accuracy, step=epoch)
 
             print(
-                f"[{run_name}] Epoch {epoch}/{args.epochs} | train_loss {train_loss:.4f} acc {train_acc:.4f} | val_loss {val_loss:.4f} acc {val_acc:.4f}"
+                f"Epoch {epoch+1}/{num_epochs} | "
+                f"Train Loss: {avg_train_loss:.4f} | "
+                f"Val Loss: {avg_val_loss:.4f} | "
+                f"Val Acc: {accuracy:.4f}"
             )
 
-        # final metrics
-        mlflow.log_metric("final_train_accuracy", train_accs[-1])
-        mlflow.log_metric("final_val_accuracy", val_accs[-1])
-        mlflow.log_metric("final_train_loss", train_losses[-1])
-        mlflow.log_metric("final_val_loss", val_losses[-1])
+        # Final metrics
+        mlflow.log_metric("final_val_accuracy", val_accuracies[-1])
 
-        # log loss curves
+        # -----------------------------
+        # Plot loss curves
+        # -----------------------------
         plt.figure()
-        plt.plot(range(1, args.epochs + 1), train_losses, label="train_loss")
-        plt.plot(range(1, args.epochs + 1), val_losses, label="val_loss")
+        plt.plot(train_losses, label="Train Loss")
+        plt.plot(val_losses, label="Validation Loss")
         plt.legend()
-        plt.xlabel("epoch")
-        plt.ylabel("loss")
-        loss_plot = f"loss_curve_{config['batch_size']}_{config['lr']}.png"
-        plt.savefig(loss_plot)
-        mlflow.log_artifact(loss_plot)
+        plt.title("Loss Curve")
 
-        # log class labels
-        labels_json = f"class_labels_{config['batch_size']}_{config['lr']}.json"
-        with open(labels_json, "w", encoding="utf-8") as f:
-            json.dump(dataset.classes, f)
-        mlflow.log_artifact(labels_json)
+        plot_path = "results/loss_curve.png"
+        plt.savefig(plot_path)
+        mlflow.log_artifact(plot_path)
 
-        # log and register model
+        # -----------------------------
+        # Log and register model
+        # -----------------------------
         mlflow.pytorch.log_model(
-            pytorch_model=model,
+            model,
             artifact_path="model",
-            registered_model_name=args.registered_model_name,
-        )
-        print(
-            f"Model logged and registered as: {args.registered_model_name} (run_id={run_id})"
+            registered_model_name="pet_classifier",
         )
 
-
-def main(args):
-    mlflow.set_experiment(args.experiment_name)
-
-    transform = transforms.Compose(
-        [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-
-    dataset = OxfordIIITPet(
-        root=args.data_dir,
-        split="trainval",
-        target_types="category",
-        transform=transform,
-        download=True,
-    )
-    n_classes = len(dataset.classes)
-    print("Detected classes:", n_classes)
-
-    # define experiments
-    batch_sizes = [16, 32]
-    learning_rates = [1e-3, 5e-4]
-    configs = [
-        {"batch_size": bs, "lr": lr}
-        for bs, lr in itertools.product(batch_sizes, learning_rates)
-    ]
-
-    for config in configs:
-        run_experiment(config, args, dataset, n_classes)
+        print("Training finished! Model registered in MLflow.")
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--data-dir", type=str, default="./data", help="root to download dataset"
-    )
-    parser.add_argument("--experiment-name", type=str, default="MLOps-Lab3-experiment")
-    parser.add_argument("--registered-model-name", type=str, default="MLOps-Lab3-Model")
-    parser.add_argument("--model-name", type=str, default="mobilenet_v2")
-    parser.add_argument(
-        "--epochs", type=int, default=5, help="train 5 epochs for all experiments"
-    )
-    parser.add_argument("--val-ratio", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=42)
-    train_args = parser.parse_args()
-    main(train_args)
+    train_model()
