@@ -1,4 +1,5 @@
 import os
+import json
 import pytest
 from PIL import Image
 from click.testing import CliRunner
@@ -7,6 +8,9 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from cli.cli import cli
 
+CLASS_LABELS_PATH = os.path.join(os.path.dirname(__file__), "..", "results", "class_labels.json")
+with open(CLASS_LABELS_PATH, "r", encoding="utf-8") as f:
+    class_labels = json.load(f)
 
 @pytest.fixture
 def temp_image(tmp_path):
@@ -20,7 +24,7 @@ def test_cli_predict(temp_image):
     runner = CliRunner()
     result = runner.invoke(cli, ["predict", str(temp_image)])
     assert result.exit_code == 0
-    assert result.output.strip() in ["dog", "cat", "horse", "bear", "pig"]
+    assert result.output.strip() in class_labels
 
 
 def test_cli_resize(temp_image):
