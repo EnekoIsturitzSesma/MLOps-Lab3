@@ -3,7 +3,7 @@ install:
 	uv sync
 
 test:
-	uv run python -m pytest ./tests -vv  --cov=mylib --cov=api --cov=cli --ignore=mylib/serialize_best_model.py --ignore=mylib/inference.py --ignore=mylib/train.py 
+	uv run python -m pytest ./tests -vv  --cov=mylib --cov=api --cov=cli
 
 format:	
 	uv run black mylib/*.py api/*.py cli/*.py
