@@ -33,8 +33,10 @@ COPY --from=builder /usr/local /usr/local
 COPY api ./api
 COPY mylib ./mylib
 COPY templates ./templates
-COPY results/best_model.onnx ./best_model.onnx
-COPY results/class_labels.json ./class_labels.json
+RUN mkdir -p results
+COPY results/best_model.onnx ./results/best_model.onnx
+COPY results/class_labels.json ./results/class_labels.json
+
 # Expose the port associated with the API created with FastAPI
 EXPOSE 8000
 
