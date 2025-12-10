@@ -25,7 +25,6 @@ COPY pyproject.toml .
 COPY uv.lock* .
 # Install the dependencies of the project in the system's environment
 RUN uv pip install --system --no-cache .
-
 # Copy the source code and prepare the execution environment
 FROM base AS runtime
 # Copy the installed dependencies
