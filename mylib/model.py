@@ -7,7 +7,6 @@ import torchvision.transforms as transforms
 
 class PetClassifierONNX:
     def __init__(self, model_path="best_model.onnx", labels_path="class_labels.json"):
-        # Load class labels
         with open(labels_path, "r", encoding="utf-8") as f:
             self.class_labels = json.load(f)
 
@@ -21,7 +20,6 @@ class PetClassifierONNX:
 
         self.input_name = self.session.get_inputs()[0].name
 
-        # Preprocessing (same as training)
         self.transform = transforms.Compose(
             [
                 transforms.Resize((224, 224)),
@@ -34,13 +32,13 @@ class PetClassifierONNX:
 
     def preprocess(self, image: Image.Image):
         tensor = self.transform(image)
-        tensor = tensor.unsqueeze(0)  # batch dimension
+        tensor = tensor.unsqueeze(0)
         return tensor.numpy()
 
     def predict(self, image: Image.Image):
         inp = self.preprocess(image)
         outputs = self.session.run(None, {self.input_name: inp})
-        logits = outputs[0][0]  # first batch element
+        logits = outputs[0][0]
         pred_idx = int(np.argmax(logits))
         return self.class_labels[pred_idx]
 

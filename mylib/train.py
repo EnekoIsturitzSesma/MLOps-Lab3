@@ -12,9 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-# -----------------------------
-# Reproducibilidad
-# -----------------------------
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -22,9 +19,6 @@ def set_seed(seed=42):
     torch.cuda.manual_seed_all(seed)
 
 
-# -----------------------------
-# Training of a single experiment
-# -----------------------------
 def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
     set_seed(42)
 
@@ -43,9 +37,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
             }
         )
 
-        # -----------------------------
-        # Dataset & transforms
-        # -----------------------------
         transform = transforms.Compose(
             [
                 transforms.Resize((224, 224)),
@@ -66,14 +57,12 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
 
         num_classes = len(dataset.classes)
 
-        # Save class labels for inference later
         os.makedirs("results", exist_ok=True)
         class_path = "results/class_labels.json"
         with open(class_path, "w", encoding="utf-8") as f:
             json.dump(dataset.classes, f)
         mlflow.log_artifact(class_path)
 
-        # Split dataset
         total = len(dataset)
         train_size = int(0.8 * total)
         val_size = total - train_size
@@ -84,9 +73,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-        # -----------------------------
-        # Load pretrained model
-        # -----------------------------
         model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.IMAGENET1K_V1)
         for param in model.features.parameters():
             param.requires_grad = False
@@ -103,9 +89,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
         val_losses = []
         val_accuracies = []
 
-        # -----------------------------
-        # Training Loop
-        # -----------------------------
         for epoch in range(num_epochs):
             model.train()
             running_loss = 0.0
@@ -124,7 +107,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
             avg_train_loss = running_loss / len(train_loader)
             train_losses.append(avg_train_loss)
 
-            # Validation
             model.eval()
             val_loss = 0.0
             correct = 0
@@ -147,7 +129,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
             val_losses.append(avg_val_loss)
             val_accuracies.append(accuracy)
 
-            # Log metrics
             mlflow.log_metric("train_loss", avg_train_loss, step=epoch)
             mlflow.log_metric("val_loss", avg_val_loss, step=epoch)
             mlflow.log_metric("val_accuracy", accuracy, step=epoch)
@@ -162,9 +143,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
         final_acc = val_accuracies[-1]
         mlflow.log_metric("final_val_accuracy", final_acc)
 
-        # -----------------------------
-        # Save curve plot
-        # -----------------------------
         plt.figure()
         plt.plot(train_losses, label="Train Loss")
         plt.plot(val_losses, label="Validation Loss")
@@ -175,9 +153,6 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
         plt.savefig(plot_path)
         mlflow.log_artifact(plot_path)
 
-        # -----------------------------
-        # Log PyTorch model
-        # -----------------------------
         mlflow.pytorch.log_model(
             model,
             artifact_path="model",
@@ -187,13 +162,9 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
         return final_acc
 
 
-# -----------------------------
-# Grid search + choose best model
-# -----------------------------
 def train_all():
     experiment_name = "pet_experiments"
 
-    # 4 experiments
     configs = [
         {"batch_size": 8, "lr": 1e-3},
         {"batch_size": 16, "lr": 1e-3},
