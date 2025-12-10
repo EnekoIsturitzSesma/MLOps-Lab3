@@ -69,7 +69,7 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
         # Save class labels for inference later
         os.makedirs("results", exist_ok=True)
         class_path = "results/class_labels.json"
-        with open(class_path, "w") as f:
+        with open(class_path, "w", encoding="utf-8") as f:
             json.dump(dataset.classes, f)
         mlflow.log_artifact(class_path)
 
@@ -184,7 +184,7 @@ def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
             registered_model_name="pet_classifier",
         )
 
-        return final_acc, model
+        return final_acc
 
 
 # -----------------------------
@@ -202,12 +202,11 @@ def train_all():
     ]
 
     best_acc = -1
-    best_model = None
 
     for cfg in configs:
         print(f"\n=== Training experiment: bs={cfg['batch_size']} lr={cfg['lr']} ===")
 
-        acc, model = run_experiment(
+        acc = run_experiment(
             model_name="mobilenetV2",
             batch_size=cfg["batch_size"],
             lr=cfg["lr"],
@@ -217,8 +216,6 @@ def train_all():
 
         if acc > best_acc:
             best_acc = acc
-
-   
 
     print(f"\nBest model accuracy = {best_acc:.4f}")
 

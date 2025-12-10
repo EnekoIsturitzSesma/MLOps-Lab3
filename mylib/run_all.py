@@ -1,11 +1,13 @@
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from train import train_all
-from serialize_best_model import main as serialize_model
-from inference import PetClassifierONNX
+from train import train_all  # pylint: disable=import-error
+from serialize_best_model import main as serialize_model  # pylint: disable=import-error
+from inference import PetClassifierONNX  # pylint: disable=import-error
 from PIL import Image
+
 
 def main():
     print("\n=== TRAINING EXPERIMENTS ===")
@@ -24,6 +26,7 @@ def main():
     pred = classifier.predict(img)
 
     print(f"Predicted class: {pred}")
+
 
 if __name__ == "__main__":
     main()
