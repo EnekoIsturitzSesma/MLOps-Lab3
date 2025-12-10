@@ -36,3 +36,8 @@ torchvision = { index = "pytorch-cpu" }
 omit = ["mylib/train.py",
         "mylib/inference.py",
         "mylib/serialize_best_model.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:"
+]

@@ -47,6 +47,7 @@ class PetClassifierONNX:
 
 model = PetClassifierONNX("model.onnx", "class_labels.json")
 
+
 def predict_class(image):
     return model.predict(image)
 

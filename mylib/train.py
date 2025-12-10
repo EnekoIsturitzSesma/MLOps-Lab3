@@ -74,8 +74,6 @@ def train_model(
             target_types="category",
         )
 
-
-
         num_classes = len(getattr(dataset, "classes", []))
 
         # Save class labels for later

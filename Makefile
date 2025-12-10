@@ -3,7 +3,7 @@ install:
 	uv sync
 
 test:
-	uv run python -m pytest ./tests -vv  --cov=mylib --cov=api --cov=cli
+	uv run python -m pytest ./tests -vv  --cov=mylib --cov=api --cov=cli --cov-report term-missing
 
 format:	
 	uv run black mylib/*.py api/*.py cli/*.py

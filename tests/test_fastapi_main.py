@@ -17,6 +17,13 @@ def create_test_image():
     img.save(img_bytes, format="JPEG")
     img_bytes.seek(0)
     return img_bytes
+    
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "html" in response.text.lower()
 
 
 def test_predict():
