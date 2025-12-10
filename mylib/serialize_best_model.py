@@ -7,9 +7,9 @@ import mlflow.pytorch
 
 
 MODEL_NAME = "pet_classifier"  # nombre con el que registraste el modelo
-OUTPUT_DIR = "serialized"  # carpeta donde guardamos el onnx + labels
+OUTPUT_DIR = "results"  # carpeta donde guardamos el onnx + labels
 LABELS_FILENAME = "class_labels.json"  # nombre del archivo con labels
-ONNX_FILENAME = "model.onnx"  # nombre del modelo serializado
+ONNX_FILENAME = "best_model.onnx"  # nombre del modelo serializado
 
 
 def get_best_model_version(client):

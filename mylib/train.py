@@ -23,25 +23,15 @@ def set_seed(seed=42):
 
 
 # -----------------------------
-# Main training function
+# Training of a single experiment
 # -----------------------------
-def train_model(
-    experiment_name="pet_experiments",
-    model_name="mobilenetV2",
-    batch_size=16,
-    lr=1e-3,
-    num_epochs=3,
-):
+def run_experiment(model_name, batch_size, lr, num_epochs, experiment_name):
     set_seed(42)
 
-    # -----------------------------
-    # MLflow setup
-    # -----------------------------
     mlflow.set_experiment(experiment_name)
     run_name = f"{model_name}_bs{batch_size}_lr{lr}"
 
     with mlflow.start_run(run_name=run_name):
-        # Log parámetros
         mlflow.log_params(
             {
                 "model": model_name,
@@ -54,7 +44,7 @@ def train_model(
         )
 
         # -----------------------------
-        # Data transforms
+        # Dataset & transforms
         # -----------------------------
         transform = transforms.Compose(
             [
@@ -74,13 +64,13 @@ def train_model(
             target_types="category",
         )
 
-        num_classes = len(getattr(dataset, "classes", []))
+        num_classes = len(dataset.classes)
 
-        # Save class labels for later
+        # Save class labels for inference later
         os.makedirs("results", exist_ok=True)
         class_path = "results/class_labels.json"
-        with open(class_path, "w", encoding="utf-8") as f:
-            json.dump(getattr(dataset, "classes", []), f)
+        with open(class_path, "w") as f:
+            json.dump(dataset.classes, f)
         mlflow.log_artifact(class_path)
 
         # Split dataset
@@ -109,13 +99,13 @@ def train_model(
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=lr)
 
-        # -----------------------------
-        # Training Loop
-        # -----------------------------
         train_losses = []
         val_losses = []
         val_accuracies = []
 
+        # -----------------------------
+        # Training Loop
+        # -----------------------------
         for epoch in range(num_epochs):
             model.train()
             running_loss = 0.0
@@ -169,11 +159,11 @@ def train_model(
                 f"Val Acc: {accuracy:.4f}"
             )
 
-        # Final metrics
-        mlflow.log_metric("final_val_accuracy", val_accuracies[-1])
+        final_acc = val_accuracies[-1]
+        mlflow.log_metric("final_val_accuracy", final_acc)
 
         # -----------------------------
-        # Plot loss curves
+        # Save curve plot
         # -----------------------------
         plt.figure()
         plt.plot(train_losses, label="Train Loss")
@@ -181,12 +171,12 @@ def train_model(
         plt.legend()
         plt.title("Loss Curve")
 
-        plot_path = "results/loss_curve.png"
+        plot_path = f"results/loss_curve_bs{batch_size}_lr{lr}.png"
         plt.savefig(plot_path)
         mlflow.log_artifact(plot_path)
 
         # -----------------------------
-        # Log and register model
+        # Log PyTorch model
         # -----------------------------
         mlflow.pytorch.log_model(
             model,
@@ -194,8 +184,44 @@ def train_model(
             registered_model_name="pet_classifier",
         )
 
-        print("Training finished! Model registered in MLflow.")
+        return final_acc, model
+
+
+# -----------------------------
+# Grid search + choose best model
+# -----------------------------
+def train_all():
+    experiment_name = "pet_experiments"
+
+    # 4 experiments
+    configs = [
+        {"batch_size": 8, "lr": 1e-3},
+        {"batch_size": 16, "lr": 1e-3},
+        {"batch_size": 8, "lr": 5e-4},
+        {"batch_size": 16, "lr": 5e-4},
+    ]
+
+    best_acc = -1
+    best_model = None
+
+    for cfg in configs:
+        print(f"\n=== Training experiment: bs={cfg['batch_size']} lr={cfg['lr']} ===")
+
+        acc, model = run_experiment(
+            model_name="mobilenetV2",
+            batch_size=cfg["batch_size"],
+            lr=cfg["lr"],
+            num_epochs=3,
+            experiment_name=experiment_name,
+        )
+
+        if acc > best_acc:
+            best_acc = acc
+
+   
+
+    print(f"\nBest model accuracy = {best_acc:.4f}")
 
 
 if __name__ == "__main__":
-    train_model()
+    train_all()
